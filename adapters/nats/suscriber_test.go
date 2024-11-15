@@ -11,7 +11,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	natsadapter "github.com/mcosta74/hexkit/adapters/nats"
-	"github.com/mcosta74/hexkit/internal/shared"
+	kittesting "github.com/mcosta74/hexkit/internal/testing"
 )
 
 type Response struct {
@@ -42,7 +42,7 @@ func testRequest[Req any, Resp any](t *testing.T, c *nats.Conn, h *natsadapter.S
 }
 
 func TestSubscriber(t *testing.T) {
-	s, c := shared.NewNATSServerAndConn(t)
+	s, c := kittesting.NewNATSServerAndConn(t)
 	defer func() {
 		s.Shutdown()
 		s.WaitForShutdown()

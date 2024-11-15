@@ -9,7 +9,7 @@ import (
 	"time"
 
 	microadapter "github.com/mcosta74/hexkit/adapters/nats/micro"
-	"github.com/mcosta74/hexkit/internal/shared"
+	kittesting "github.com/mcosta74/hexkit/internal/testing"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/micro"
 )
@@ -52,7 +52,7 @@ func testRequest[Req any, Resp any](t *testing.T, c *nats.Conn, h *microadapter.
 }
 
 func TestHandler(t *testing.T) {
-	s, c := shared.NewNATSServerAndConn(t)
+	s, c := kittesting.NewNATSServerAndConn(t)
 	defer func() {
 		s.Shutdown()
 		s.WaitForShutdown()

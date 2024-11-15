@@ -1,4 +1,4 @@
-package shared
+package testing
 
 import (
 	"fmt"

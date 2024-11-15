@@ -101,5 +101,5 @@ type ErrorEncoder func(ctx context.Context, err error, msg micro.Request)
 
 // DefaultErrorEncoder is used when no error encoder is provided
 func DefaultErrorEncoder(ctx context.Context, err error, msg micro.Request) {
-	_ = msg.Respond([]byte(err.Error()))
+	_ = msg.Error("500", err.Error(), nil)
 }

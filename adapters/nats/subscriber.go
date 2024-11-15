@@ -2,6 +2,7 @@ package nats
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 
 	"github.com/mcosta74/hexkit/adapters"
@@ -89,7 +90,7 @@ func (s *Subscriber[Req, Resp]) ServeMsg(nc *nats.Conn) nats.MsgHandler {
 		}
 
 		if msg.Reply != "" {
-			if err := s.enc(ctx, nc, response); err != nil {
+			if err := s.enc(ctx, msg.Reply, nc, response); err != nil {
 				s.errorHandler.Handle(ctx, err)
 				s.errorEncoder(ctx, err, msg.Reply, nc)
 				return
@@ -103,5 +104,15 @@ type ErrorEncoder func(ctx context.Context, err error, reply string, nc *nats.Co
 
 // DefaultErrorEncoder is used when no error encoder is provided
 func DefaultErrorEncoder(ctx context.Context, err error, reply string, nc *nats.Conn) {
-	_ = nc.Publish(reply, []byte(err.Error()))
+	response := struct {
+		Error string `json:"err,omitempty"`
+	}{
+		Error: err.Error(),
+	}
+
+	b, err := json.Marshal(response)
+	if err != nil {
+		return
+	}
+	_ = nc.Publish(reply, b)
 }

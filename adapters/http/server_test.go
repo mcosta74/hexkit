@@ -11,37 +11,15 @@ import (
 	kithttp "github.com/mcosta74/hexkit/adapters/http"
 )
 
-func goodPort(context.Context, struct{}) (struct{}, error) {
-	return struct{}{}, nil
-}
-
-func failingPort(context.Context, struct{}) (struct{}, error) {
-	return struct{}{}, errors.New("fail")
-}
-
-func goodDecoder(context.Context, *http.Request) (struct{}, error) {
-	return struct{}{}, nil
-}
-
-func failingDecoder(context.Context, *http.Request) (struct{}, error) {
-	return struct{}{}, errors.New("fail")
-}
-
-func goodEncoder(ctx context.Context, w http.ResponseWriter, resp struct{}) error {
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("ok"))
-	return nil
-}
-
-func failingEncoder(context.Context, http.ResponseWriter, struct{}) error {
-	return errors.New("fail")
-}
-
 func TestServerDecodeError(t *testing.T) {
 	handler := kithttp.NewServer(
-		goodPort,
-		failingDecoder,
-		goodEncoder,
+		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+		func(ctx context.Context, r *http.Request) (struct{}, error) { return struct{}{}, errors.New("fail") },
+		func(_ context.Context, w http.ResponseWriter, _ struct{}) error {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+			return nil
+		},
 	)
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -54,9 +32,13 @@ func TestServerDecodeError(t *testing.T) {
 
 func TestServerPortError(t *testing.T) {
 	handler := kithttp.NewServer(
-		failingPort,
-		goodDecoder,
-		goodEncoder,
+		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, errors.New("fail") },
+		func(ctx context.Context, r *http.Request) (struct{}, error) { return struct{}{}, nil },
+		func(_ context.Context, w http.ResponseWriter, _ struct{}) error {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+			return nil
+		},
 	)
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -69,9 +51,11 @@ func TestServerPortError(t *testing.T) {
 
 func TestServerEncodeError(t *testing.T) {
 	handler := kithttp.NewServer(
-		goodPort,
-		goodDecoder,
-		failingEncoder,
+		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+		func(ctx context.Context, r *http.Request) (struct{}, error) { return struct{}{}, nil },
+		func(_ context.Context, w http.ResponseWriter, _ struct{}) error {
+			return errors.New("fail")
+		},
 	)
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -84,9 +68,13 @@ func TestServerEncodeError(t *testing.T) {
 
 func TestServerNoError(t *testing.T) {
 	handler := kithttp.NewServer(
-		goodPort,
-		goodDecoder,
-		goodEncoder,
+		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+		func(ctx context.Context, r *http.Request) (struct{}, error) { return struct{}{}, nil },
+		func(_ context.Context, w http.ResponseWriter, _ struct{}) error {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+			return nil
+		},
 	)
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -115,8 +103,12 @@ func TestServerErrorEncoder(t *testing.T) {
 
 	handler := kithttp.NewServer(
 		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, errValidation },
-		goodDecoder,
-		goodEncoder,
+		func(ctx context.Context, r *http.Request) (struct{}, error) { return struct{}{}, nil },
+		func(_ context.Context, w http.ResponseWriter, _ struct{}) error {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+			return nil
+		},
 		kithttp.WithErrorEncoder[struct{}, struct{}](func(ctx context.Context, err error, w http.ResponseWriter) {
 			w.WriteHeader(errCode(err))
 		}),

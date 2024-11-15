@@ -5,37 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"testing"
 	"time"
 
-	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 
 	natsadapter "github.com/mcosta74/hexkit/adapters/nats"
+	"github.com/mcosta74/hexkit/internal/shared"
 )
-
-func newServerAndConn(t *testing.T) (*server.Server, *nats.Conn) {
-	s, err := server.NewServer(&server.Options{
-		Host: "localhost",
-		Port: 0,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	go s.Start()
-
-	if !s.ReadyForConnections(5 * time.Second) {
-		log.Fatal("NATS server not ready in time")
-	}
-
-	c, err := nats.Connect(fmt.Sprintf("nats://%s", s.Addr().String()), nats.Name(t.Name()))
-	if err != nil {
-		t.Fatalf("error connecting to the server: %s", err)
-	}
-	return s, c
-}
 
 type Response struct {
 	Data string `json:"data,omitempty"`
@@ -63,7 +40,7 @@ func testRequest[Req any, Resp any](t *testing.T, c *nats.Conn, h *natsadapter.S
 }
 
 func TestSubscriberDecodeError(t *testing.T) {
-	s, c := newServerAndConn(t)
+	s, c := shared.NewNATSServerAndConn(t)
 	defer func() {
 		s.Shutdown()
 		s.WaitForShutdown()
@@ -84,7 +61,7 @@ func TestSubscriberDecodeError(t *testing.T) {
 }
 
 func TestSubscriberPortError(t *testing.T) {
-	s, c := newServerAndConn(t)
+	s, c := shared.NewNATSServerAndConn(t)
 	defer func() {
 		s.Shutdown()
 		s.WaitForShutdown()
@@ -105,7 +82,7 @@ func TestSubscriberPortError(t *testing.T) {
 }
 
 func TestSubscriberEncodeError(t *testing.T) {
-	s, c := newServerAndConn(t)
+	s, c := shared.NewNATSServerAndConn(t)
 	defer func() {
 		s.Shutdown()
 		s.WaitForShutdown()
@@ -126,7 +103,7 @@ func TestSubscriberEncodeError(t *testing.T) {
 }
 
 func TestSubscriberNoError(t *testing.T) {
-	s, c := newServerAndConn(t)
+	s, c := shared.NewNATSServerAndConn(t)
 	defer func() {
 		s.Shutdown()
 		s.WaitForShutdown()
@@ -160,7 +137,7 @@ func TestSubscriberNoError(t *testing.T) {
 }
 
 func TestSubscriberErrorEncoder(t *testing.T) {
-	s, c := newServerAndConn(t)
+	s, c := shared.NewNATSServerAndConn(t)
 	defer func() {
 		s.Shutdown()
 		s.WaitForShutdown()

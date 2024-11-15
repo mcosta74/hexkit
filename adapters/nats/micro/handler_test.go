@@ -21,8 +21,10 @@ type Response struct {
 }
 
 func testRequest[Req any, Resp any](t *testing.T, c *nats.Conn, h *microadapter.Handler[Req, Resp]) Response {
+	t.Helper()
+
 	svc, err := micro.AddService(c, micro.Config{
-		Name:       t.Name(),
+		Name:       "MicroAdapterTest",
 		Version:    "0.0.1",
 		QueueGroup: "microadapter",
 		Endpoint: &micro.EndpointConfig{
@@ -49,7 +51,7 @@ func testRequest[Req any, Resp any](t *testing.T, c *nats.Conn, h *microadapter.
 	}
 }
 
-func TestHandlerDecodeError(t *testing.T) {
+func TestHandler(t *testing.T) {
 	s, c := shared.NewNATSServerAndConn(t)
 	defer func() {
 		s.Shutdown()
@@ -57,130 +59,104 @@ func TestHandlerDecodeError(t *testing.T) {
 	}()
 	defer c.Close()
 
-	handler := microadapter.NewHandler(
-		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
-		func(context.Context, micro.Request) (struct{}, error) { return struct{}{}, errors.New("fail") },
-		func(context.Context, micro.Request, struct{}) error { return nil },
-	)
+	t.Run("Decode Error", func(t *testing.T) {
+		handler := microadapter.NewHandler(
+			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+			func(context.Context, micro.Request) (struct{}, error) { return struct{}{}, errors.New("fail") },
+			func(context.Context, micro.Request, struct{}) error { return nil },
+		)
 
-	resp := testRequest(t, c, handler)
+		resp := testRequest(t, c, handler)
 
-	if want, got := "fail", resp.Err; want != got {
-		t.Errorf("unexpected response: want=%q, got=%q", want, got)
-	}
+		if want, got := "fail", resp.Err; want != got {
+			t.Errorf("unexpected response: want=%q, got=%q", want, got)
+		}
 
-	if want, got := 500, resp.ErrCode; want != got {
-		t.Errorf("unexpected response: want=%d, got=%d", want, got)
-	}
-}
+		if want, got := 500, resp.ErrCode; want != got {
+			t.Errorf("unexpected response: want=%d, got=%d", want, got)
+		}
+	})
 
-func TestSubscriberPortError(t *testing.T) {
-	s, c := shared.NewNATSServerAndConn(t)
-	defer func() {
-		s.Shutdown()
-		s.WaitForShutdown()
-	}()
-	defer c.Close()
+	t.Run("Port Error", func(t *testing.T) {
+		handler := microadapter.NewHandler(
+			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, errors.New("fail") },
+			func(context.Context, micro.Request) (struct{}, error) { return struct{}{}, nil },
+			func(context.Context, micro.Request, struct{}) error { return nil },
+		)
 
-	handler := microadapter.NewHandler(
-		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, errors.New("fail") },
-		func(context.Context, micro.Request) (struct{}, error) { return struct{}{}, nil },
-		func(context.Context, micro.Request, struct{}) error { return nil },
-	)
+		resp := testRequest(t, c, handler)
 
-	resp := testRequest(t, c, handler)
+		if want, got := "fail", resp.Err; want != got {
+			t.Errorf("unexpected response: want=%q, got=%q", want, got)
+		}
 
-	if want, got := "fail", resp.Err; want != got {
-		t.Errorf("unexpected response: want=%q, got=%q", want, got)
-	}
+		if want, got := 500, resp.ErrCode; want != got {
+			t.Errorf("unexpected response: want=%d, got=%d", want, got)
+		}
+	})
 
-	if want, got := 500, resp.ErrCode; want != got {
-		t.Errorf("unexpected response: want=%d, got=%d", want, got)
-	}
-}
+	t.Run("Encode Error", func(t *testing.T) {
+		handler := microadapter.NewHandler(
+			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+			func(context.Context, micro.Request) (struct{}, error) { return struct{}{}, nil },
+			func(context.Context, micro.Request, struct{}) error { return errors.New("fail") },
+		)
 
-func TestSubscriberEncodeError(t *testing.T) {
-	s, c := shared.NewNATSServerAndConn(t)
-	defer func() {
-		s.Shutdown()
-		s.WaitForShutdown()
-	}()
-	defer c.Close()
+		resp := testRequest(t, c, handler)
 
-	handler := microadapter.NewHandler(
-		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
-		func(context.Context, micro.Request) (struct{}, error) { return struct{}{}, nil },
-		func(context.Context, micro.Request, struct{}) error { return errors.New("fail") },
-	)
+		if want, got := "fail", resp.Err; want != got {
+			t.Errorf("unexpected response: want=%q, got=%q", want, got)
+		}
 
-	resp := testRequest(t, c, handler)
+		if want, got := 500, resp.ErrCode; want != got {
+			t.Errorf("unexpected response: want=%d, got=%d", want, got)
+		}
+	})
 
-	if want, got := "fail", resp.Err; want != got {
-		t.Errorf("unexpected response: want=%q, got=%q", want, got)
-	}
+	t.Run("Happy Path", func(t *testing.T) {
+		handler := microadapter.NewHandler(
+			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+			func(context.Context, micro.Request) (struct{}, error) { return struct{}{}, nil },
+			func(_ context.Context, r micro.Request, _ struct{}) error {
+				_ = r.Respond([]byte("hello world"))
+				return nil
+			},
+		)
 
-	if want, got := 500, resp.ErrCode; want != got {
-		t.Errorf("unexpected response: want=%d, got=%d", want, got)
-	}
-}
+		resp := testRequest(t, c, handler)
 
-func TestSubscriberNoError(t *testing.T) {
-	s, c := shared.NewNATSServerAndConn(t)
-	defer func() {
-		s.Shutdown()
-		s.WaitForShutdown()
-	}()
-	defer c.Close()
+		if want, got := "", resp.Err; want != got {
+			t.Errorf("unexpected response: want=%q, got=%q", want, got)
+		}
 
-	handler := microadapter.NewHandler(
-		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
-		func(context.Context, micro.Request) (struct{}, error) { return struct{}{}, nil },
-		func(_ context.Context, r micro.Request, _ struct{}) error {
-			_ = r.Respond([]byte("hello world"))
-			return nil
-		},
-	)
+		if want, got := 0, resp.ErrCode; want != got {
+			t.Errorf("unexpected response: want=%d, got=%d", want, got)
+		}
 
-	resp := testRequest(t, c, handler)
+		if want, got := "hello world", resp.Data; want != got {
+			t.Errorf("unexpected response: want=%q, got=%q", want, got)
+		}
+	})
 
-	if want, got := "", resp.Err; want != got {
-		t.Errorf("unexpected response: want=%q, got=%q", want, got)
-	}
+	t.Run("Custom Error Encoder", func(t *testing.T) {
+		handler := microadapter.NewHandler(
+			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+			func(context.Context, micro.Request) (struct{}, error) { return struct{}{}, nil },
+			func(context.Context, micro.Request, struct{}) error { return errors.New("fail") },
+			microadapter.WithErrorEncoder[struct{}, struct{}](func(_ context.Context, err error, msg micro.Request) {
+				_ = msg.Error("500", fmt.Sprintf("custom - %s", err.Error()), nil)
+			}),
+		)
 
-	if want, got := 0, resp.ErrCode; want != got {
-		t.Errorf("unexpected response: want=%d, got=%d", want, got)
-	}
+		resp := testRequest(t, c, handler)
 
-	if want, got := "hello world", resp.Data; want != got {
-		t.Errorf("unexpected response: want=%q, got=%q", want, got)
-	}
+		if want, got := "custom - fail", resp.Err; want != got {
+			t.Errorf("unexpected response: want=%q, got=%q", want, got)
+		}
 
-}
+		if want, got := 500, resp.ErrCode; want != got {
+			t.Errorf("unexpected response: want=%d, got=%d", want, got)
+		}
+	})
 
-func TestSubscriberErrorEncoder(t *testing.T) {
-	s, c := shared.NewNATSServerAndConn(t)
-	defer func() {
-		s.Shutdown()
-		s.WaitForShutdown()
-	}()
-	defer c.Close()
-
-	handler := microadapter.NewHandler(
-		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
-		func(context.Context, micro.Request) (struct{}, error) { return struct{}{}, nil },
-		func(context.Context, micro.Request, struct{}) error { return errors.New("fail") },
-		microadapter.WithErrorEncoder[struct{}, struct{}](func(_ context.Context, err error, msg micro.Request) {
-			_ = msg.Error("500", fmt.Sprintf("custom - %s", err.Error()), nil)
-		}),
-	)
-
-	resp := testRequest(t, c, handler)
-
-	if want, got := "custom - fail", resp.Err; want != got {
-		t.Errorf("unexpected response: want=%q, got=%q", want, got)
-	}
-
-	if want, got := 500, resp.ErrCode; want != got {
-		t.Errorf("unexpected response: want=%d, got=%d", want, got)
-	}
 }

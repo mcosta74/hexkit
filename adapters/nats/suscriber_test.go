@@ -20,6 +20,8 @@ type Response struct {
 }
 
 func testRequest[Req any, Resp any](t *testing.T, c *nats.Conn, h *natsadapter.Subscriber[Req, Resp]) Response {
+	t.Helper()
+
 	sub, err := c.QueueSubscribe("natsadapter.test", "natsadapter", h.ServeMsg(c))
 	if err != nil {
 		t.Fatal(err)
@@ -39,7 +41,7 @@ func testRequest[Req any, Resp any](t *testing.T, c *nats.Conn, h *natsadapter.S
 	return resp
 }
 
-func TestSubscriberDecodeError(t *testing.T) {
+func TestSubscriber(t *testing.T) {
 	s, c := shared.NewNATSServerAndConn(t)
 	defer func() {
 		s.Shutdown()
@@ -47,125 +49,99 @@ func TestSubscriberDecodeError(t *testing.T) {
 	}()
 	defer c.Close()
 
-	handler := natsadapter.NewSubscriber(
-		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
-		func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, errors.New("fail") },
-		func(context.Context, string, *nats.Conn, struct{}) error { return nil },
-	)
+	t.Run("Decode Error", func(t *testing.T) {
+		handler := natsadapter.NewSubscriber(
+			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+			func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, errors.New("fail") },
+			func(context.Context, string, *nats.Conn, struct{}) error { return nil },
+		)
 
-	resp := testRequest(t, c, handler)
+		resp := testRequest(t, c, handler)
 
-	if want, got := "fail", resp.Err; want != got {
-		t.Errorf("unexpected response: want=%q, got=%q", want, got)
-	}
-}
+		if want, got := "fail", resp.Err; want != got {
+			t.Errorf("unexpected response: want=%q, got=%q", want, got)
+		}
+	})
+	t.Run("Port Error", func(t *testing.T) {
+		handler := natsadapter.NewSubscriber(
+			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, errors.New("fail") },
+			func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, nil },
+			func(context.Context, string, *nats.Conn, struct{}) error { return nil },
+		)
 
-func TestSubscriberPortError(t *testing.T) {
-	s, c := shared.NewNATSServerAndConn(t)
-	defer func() {
-		s.Shutdown()
-		s.WaitForShutdown()
-	}()
-	defer c.Close()
+		resp := testRequest(t, c, handler)
 
-	handler := natsadapter.NewSubscriber(
-		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, errors.New("fail") },
-		func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, nil },
-		func(context.Context, string, *nats.Conn, struct{}) error { return nil },
-	)
+		if want, got := "fail", resp.Err; want != got {
+			t.Errorf("unexpected response: want=%q, got=%q", want, got)
+		}
 
-	resp := testRequest(t, c, handler)
+	})
+	t.Run("Encode Error", func(t *testing.T) {
+		handler := natsadapter.NewSubscriber(
+			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+			func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, nil },
+			func(context.Context, string, *nats.Conn, struct{}) error { return errors.New("fail") },
+		)
 
-	if want, got := "fail", resp.Err; want != got {
-		t.Errorf("unexpected response: want=%q, got=%q", want, got)
-	}
-}
+		resp := testRequest(t, c, handler)
 
-func TestSubscriberEncodeError(t *testing.T) {
-	s, c := shared.NewNATSServerAndConn(t)
-	defer func() {
-		s.Shutdown()
-		s.WaitForShutdown()
-	}()
-	defer c.Close()
+		if want, got := "fail", resp.Err; want != got {
+			t.Errorf("unexpected response: want=%q, got=%q", want, got)
+		}
+	})
 
-	handler := natsadapter.NewSubscriber(
-		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
-		func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, nil },
-		func(context.Context, string, *nats.Conn, struct{}) error { return errors.New("fail") },
-	)
+	t.Run("Happy Path", func(t *testing.T) {
+		handler := natsadapter.NewSubscriber(
+			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+			func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, nil },
+			func(_ context.Context, reply string, nc *nats.Conn, _ struct{}) error {
+				response := struct {
+					Data string `json:"data,omitempty"`
+				}{
+					Data: "hello world",
+				}
 
-	resp := testRequest(t, c, handler)
+				b, err := json.Marshal(response)
+				if err != nil {
+					return err
+				}
+				_ = nc.Publish(reply, b)
+				return nil
+			},
+		)
 
-	if want, got := "fail", resp.Err; want != got {
-		t.Errorf("unexpected response: want=%q, got=%q", want, got)
-	}
-}
+		resp := testRequest(t, c, handler)
 
-func TestSubscriberNoError(t *testing.T) {
-	s, c := shared.NewNATSServerAndConn(t)
-	defer func() {
-		s.Shutdown()
-		s.WaitForShutdown()
-	}()
-	defer c.Close()
+		if want, got := "hello world", resp.Data; want != got {
+			t.Errorf("unexpected response: want=%q, got=%q", want, got)
+		}
+	})
 
-	handler := natsadapter.NewSubscriber(
-		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
-		func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, nil },
-		func(_ context.Context, reply string, nc *nats.Conn, _ struct{}) error {
-			response := struct {
-				Data string `json:"data,omitempty"`
-			}{
-				Data: "hello world",
-			}
+	t.Run("Custom Error Encoder", func(t *testing.T) {
+		handler := natsadapter.NewSubscriber(
+			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, errors.New("fail") },
+			func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, nil },
+			func(context.Context, string, *nats.Conn, struct{}) error { return nil },
+			natsadapter.WithErrorEncoder[struct{}, struct{}](func(ctx context.Context, err error, reply string, nc *nats.Conn) {
+				response := struct {
+					Error string `json:"err,omitempty"`
+				}{
+					Error: fmt.Sprintf("custom - %s", err.Error()),
+				}
 
-			b, err := json.Marshal(response)
-			if err != nil {
-				return err
-			}
-			_ = nc.Publish(reply, b)
-			return nil
-		},
-	)
+				b, err := json.Marshal(response)
+				if err != nil {
+					return
+				}
+				_ = nc.Publish(reply, b)
+			}),
+		)
 
-	resp := testRequest(t, c, handler)
+		resp := testRequest(t, c, handler)
 
-	if want, got := "hello world", resp.Data; want != got {
-		t.Errorf("unexpected response: want=%q, got=%q", want, got)
-	}
-}
+		if want, got := "custom - fail", resp.Err; want != got {
+			t.Errorf("unexpected response: want=%q, got=%q", want, got)
+		}
+	})
 
-func TestSubscriberErrorEncoder(t *testing.T) {
-	s, c := shared.NewNATSServerAndConn(t)
-	defer func() {
-		s.Shutdown()
-		s.WaitForShutdown()
-	}()
-	defer c.Close()
-
-	handler := natsadapter.NewSubscriber(
-		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, errors.New("fail") },
-		func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, nil },
-		func(context.Context, string, *nats.Conn, struct{}) error { return nil },
-		natsadapter.WithErrorEncoder[struct{}, struct{}](func(ctx context.Context, err error, reply string, nc *nats.Conn) {
-			response := struct {
-				Error string `json:"err,omitempty"`
-			}{
-				Error: fmt.Sprintf("custom - %s", err.Error()),
-			}
-
-			b, err := json.Marshal(response)
-			if err != nil {
-				return
-			}
-			_ = nc.Publish(reply, b)
-		}),
-	)
-
-	resp := testRequest(t, c, handler)
-
-	if want, got := "custom - fail", resp.Err; want != got {
-		t.Errorf("unexpected response: want=%q, got=%q", want, got)
-	}
 }

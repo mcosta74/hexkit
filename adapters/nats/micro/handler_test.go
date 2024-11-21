@@ -35,7 +35,9 @@ func testRequest[Req any, Resp any](t *testing.T, c *nats.Conn, h *microadapter.
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer svc.Stop()
+	defer func() {
+		_ = svc.Stop()
+	}()
 
 	r, err := c.Request("microadapter.test", []byte("test"), 3*time.Second)
 	if err != nil {

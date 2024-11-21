@@ -2,6 +2,7 @@ package http_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -10,6 +11,25 @@ import (
 
 	kithttp "github.com/mcosta74/hexkit/adapters/http"
 )
+
+func checkResponse(t *testing.T, resp *http.Response, wantCode int, wantBody []byte) {
+	t.Helper()
+
+	if want, got := wantCode, resp.StatusCode; want != got {
+		t.Errorf("want: %d, got: %d", want, got)
+	}
+	defer resp.Body.Close()
+
+	got, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Errorf("unexpected error reading response body: %v", err)
+	}
+
+	if string(wantBody) != string(got) {
+		t.Errorf("unexpected body, want: %q, got: %q", string(wantBody), string(got))
+	}
+
+}
 
 func TestServerDecodeError(t *testing.T) {
 	handler := kithttp.NewServer(
@@ -25,9 +45,7 @@ func TestServerDecodeError(t *testing.T) {
 	defer server.Close()
 
 	resp, _ := http.Get(server.URL)
-	if want, got := http.StatusInternalServerError, resp.StatusCode; want != got {
-		t.Errorf("want: %d, got: %d", want, got)
-	}
+	checkResponse(t, resp, http.StatusInternalServerError, []byte("fail"))
 }
 
 func TestServerPortError(t *testing.T) {
@@ -44,9 +62,7 @@ func TestServerPortError(t *testing.T) {
 	defer server.Close()
 
 	resp, _ := http.Get(server.URL)
-	if want, got := http.StatusInternalServerError, resp.StatusCode; want != got {
-		t.Errorf("want: %d, got: %d", want, got)
-	}
+	checkResponse(t, resp, http.StatusInternalServerError, []byte("fail"))
 }
 
 func TestServerEncodeError(t *testing.T) {
@@ -61,9 +77,7 @@ func TestServerEncodeError(t *testing.T) {
 	defer server.Close()
 
 	resp, _ := http.Get(server.URL)
-	if want, got := http.StatusInternalServerError, resp.StatusCode; want != got {
-		t.Errorf("want: %d, got: %d", want, got)
-	}
+	checkResponse(t, resp, http.StatusInternalServerError, []byte("fail"))
 }
 
 func TestServerNoError(t *testing.T) {
@@ -80,16 +94,7 @@ func TestServerNoError(t *testing.T) {
 	defer server.Close()
 
 	resp, _ := http.Get(server.URL)
-	if want, got := http.StatusOK, resp.StatusCode; want != got {
-		t.Errorf("not expected status_code: want: %d, got: %d", want, got)
-	}
-	defer resp.Body.Close()
-
-	buf, _ := io.ReadAll(resp.Body)
-	if want, got := "ok", string(buf); want != got {
-		t.Errorf("not expected body: want: %q, got: %q", want, got)
-
-	}
+	checkResponse(t, resp, http.StatusOK, []byte("ok"))
 }
 
 func TestServerErrorEncoder(t *testing.T) {
@@ -117,7 +122,31 @@ func TestServerErrorEncoder(t *testing.T) {
 	defer server.Close()
 
 	resp, _ := http.Get(server.URL)
-	if want, got := http.StatusBadRequest, resp.StatusCode; want != got {
-		t.Errorf("not expected status_code: want: %d, got: %d", want, got)
+	checkResponse(t, resp, http.StatusBadRequest, []byte(""))
+}
+
+func TestServerJSONErrorEncoder(t *testing.T) {
+	handler := kithttp.NewServer(
+		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, errors.New("fail") },
+		func(ctx context.Context, r *http.Request) (struct{}, error) { return struct{}{}, nil },
+		func(_ context.Context, w http.ResponseWriter, _ struct{}) error {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+			return nil
+		},
+		kithttp.WithErrorEncoder[struct{}, struct{}](kithttp.JSONErrorEncoder),
+	)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	resp, _ := http.Get(server.URL)
+
+	expectedBody := struct {
+		Err string `json:"err,omitempty"`
+	}{
+		Err: "fail",
 	}
+
+	d, _ := json.Marshal(expectedBody)
+	checkResponse(t, resp, http.StatusInternalServerError, d)
 }

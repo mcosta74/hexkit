@@ -15,6 +15,8 @@ type Subscriber[Req any, Resp any] struct {
 	p            ports.Port[Req, Resp]
 	dec          DecodeRequestFunc[Req]
 	enc          EncodeResponseFunc[Resp]
+	before       []RequestFunc
+	after        []SubscriberResponseFunc
 	errorEncoder ErrorEncoder
 	errorHandler adapters.ErrorHandler
 }
@@ -65,11 +67,31 @@ func WithErrorLogger[Req any, Resp any](logger *slog.Logger) SubscriberOption[Re
 	}
 }
 
+// WithSubscriberBefore functions are executed on the NATS message object
+// before the port is invoked.
+func WithSubscriberBefore[Req any, Resp any](before ...RequestFunc) SubscriberOption[Req, Resp] {
+	return func(s *Subscriber[Req, Resp]) {
+		s.before = append(s.before, before...)
+	}
+}
+
+// WithSubscriberAfter functions are executed on the HTTP response writer
+// after the port is invoked, but before anything is written on the client.
+func WithSubscriberAfter[Req any, Resp any](after ...SubscriberResponseFunc) SubscriberOption[Req, Resp] {
+	return func(s *Subscriber[Req, Resp]) {
+		s.after = append(s.after, after...)
+	}
+}
+
 // ServeMsg provides nats.MsgHandler
 func (s *Subscriber[Req, Resp]) ServeMsg(nc *nats.Conn) nats.MsgHandler {
 	return func(msg *nats.Msg) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
+
+		for _, f := range s.before {
+			ctx = f(ctx, msg)
+		}
 
 		request, err := s.dec(ctx, msg)
 		if err != nil {
@@ -87,6 +109,10 @@ func (s *Subscriber[Req, Resp]) ServeMsg(nc *nats.Conn) nats.MsgHandler {
 				s.errorEncoder(ctx, err, msg.Reply, nc)
 			}
 			return
+		}
+
+		for _, f := range s.after {
+			ctx = f(ctx, nc)
 		}
 
 		if msg.Reply != "" {
@@ -115,4 +141,10 @@ func DefaultErrorEncoder(ctx context.Context, err error, reply string, nc *nats.
 		return
 	}
 	_ = nc.Publish(reply, b)
+}
+
+// NoOpRequestDecoder it's a decoder that does nothing
+func NoOpRequestDecoder[Req any](context.Context, *nats.Msg) (Req, error) {
+	var req Req
+	return req, nil
 }

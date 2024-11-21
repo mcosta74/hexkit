@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 
@@ -14,6 +15,8 @@ type Server[Req any, Resp any] struct {
 	p            ports.Port[Req, Resp]
 	dec          DecodeRequestFunc[Req]
 	enc          EncodeResponseFunc[Resp]
+	before       []RequestFunc
+	after        []ServerResponseFunc
 	errorEncoder ErrorEncoder
 	errorHandler adapters.ErrorHandler
 }
@@ -63,9 +66,29 @@ func WithErrorLogger[Req any, Resp any](logger *slog.Logger) ServerOption[Req, R
 	}
 }
 
+// WithServerBefore functions are executed on the HTTP request object
+// before the port is invoked.
+func WithServerBefore[Req any, Resp any](before ...RequestFunc) ServerOption[Req, Resp] {
+	return func(s *Server[Req, Resp]) {
+		s.before = append(s.before, before...)
+	}
+}
+
+// WithServerAfter functions are executed on the HTTP response writer
+// after the port is invoked, but before anything is written on the client.
+func WithServerAfter[Req any, Resp any](after ...ServerResponseFunc) ServerOption[Req, Resp] {
+	return func(s *Server[Req, Resp]) {
+		s.after = append(s.after, after...)
+	}
+}
+
 // ServeHTTP implements http.Handler.
 func (s Server[Req, Resp]) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	for _, f := range s.before {
+		ctx = f(ctx, r)
+	}
 
 	request, err := s.dec(ctx, r)
 	if err != nil {
@@ -81,6 +104,10 @@ func (s Server[Req, Resp]) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	for _, f := range s.after {
+		ctx = f(ctx, w)
+	}
+
 	if err := s.enc(ctx, w, response); err != nil {
 		s.errorHandler.Handle(ctx, err)
 		s.errorEncoder(ctx, err, w)
@@ -91,9 +118,30 @@ func (s Server[Req, Resp]) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // ErrorEncoder encodes an error to the ResponseWriter.
 type ErrorEncoder func(ctx context.Context, err error, w http.ResponseWriter)
 
-// DefaultErrorEncoder is used when no error encoder is provided
+// DefaultErrorEncoder is used when no error encoder is provided.
 func DefaultErrorEncoder(ctx context.Context, err error, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/plan")
 	w.WriteHeader(http.StatusInternalServerError)
 	_, _ = w.Write([]byte(err.Error()))
+}
+
+// JSONErrorEncoder encodes errors in JSON format.
+func JSONErrorEncoder(ctx context.Context, err error, w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusInternalServerError)
+
+	data := struct {
+		Err string `json:"err,omitempty"`
+	}{
+		Err: err.Error(),
+	}
+
+	body, _ := json.Marshal(data)
+	_, _ = w.Write(body)
+}
+
+// NoOpRequestDecoder it's a decoder that does nothing
+func NoOpRequestDecoder[Req any](context.Context, *http.Request) (Req, error) {
+	var req Req
+	return req, nil
 }

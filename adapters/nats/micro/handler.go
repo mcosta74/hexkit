@@ -14,6 +14,8 @@ type Handler[Req any, Resp any] struct {
 	p            ports.Port[Req, Resp]
 	dec          DecodeRequestFunc[Req]
 	enc          EncodeResponseFunc[Resp]
+	before       []RequestFunc
+	after        []HandlerResponseFunc
 	errorEncoder ErrorEncoder
 	errorHandler adapters.ErrorHandler
 }
@@ -64,10 +66,30 @@ func WithErrorLogger[Req any, Resp any](logger *slog.Logger) HandlerOption[Req, 
 	}
 }
 
+// WithHandlerBefore functions are executed on the NATS message object
+// before the port is invoked.
+func WithHandlerBefore[Req any, Resp any](before ...RequestFunc) HandlerOption[Req, Resp] {
+	return func(s *Handler[Req, Resp]) {
+		s.before = append(s.before, before...)
+	}
+}
+
+// WithHandlerAfter functions are executed on the HTTP response writer
+// after the port is invoked, but before anything is written on the client.
+func WithHandlerAfter[Req any, Resp any](after ...HandlerResponseFunc) HandlerOption[Req, Resp] {
+	return func(s *Handler[Req, Resp]) {
+		s.after = append(s.after, after...)
+	}
+}
+
 // Handle implements micro.Handler
 func (s *Handler[Req, Resp]) Handle(msg micro.Request) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	for _, f := range s.before {
+		ctx = f(ctx, msg)
+	}
 
 	request, err := s.dec(ctx, msg)
 	if err != nil {
@@ -87,6 +109,10 @@ func (s *Handler[Req, Resp]) Handle(msg micro.Request) {
 		return
 	}
 
+	for _, f := range s.after {
+		ctx = f(ctx, msg)
+	}
+
 	if msg.Reply() != "" {
 		if err := s.enc(ctx, msg, response); err != nil {
 			s.errorHandler.Handle(ctx, err)
@@ -102,4 +128,10 @@ type ErrorEncoder func(ctx context.Context, err error, msg micro.Request)
 // DefaultErrorEncoder is used when no error encoder is provided
 func DefaultErrorEncoder(ctx context.Context, err error, msg micro.Request) {
 	_ = msg.Error("500", err.Error(), nil)
+}
+
+// NoOpRequestDecoder it's a decoder that does nothing
+func NoOpRequestDecoder[Req any](context.Context, micro.Request) (Req, error) {
+	var req Req
+	return req, nil
 }

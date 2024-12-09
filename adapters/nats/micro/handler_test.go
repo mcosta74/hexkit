@@ -10,6 +10,7 @@ import (
 
 	microadapter "github.com/mcosta74/hexkit/adapters/nats/micro"
 	kittesting "github.com/mcosta74/hexkit/internal/testing"
+	"github.com/mcosta74/hexkit/requests"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/micro"
 )
@@ -63,7 +64,7 @@ func TestHandler(t *testing.T) {
 
 	t.Run("Decode Error", func(t *testing.T) {
 		handler := microadapter.NewHandler(
-			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+			requests.HandlerFunc[struct{}, struct{}](func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil }),
 			func(context.Context, micro.Request) (struct{}, error) { return struct{}{}, errors.New("fail") },
 			func(context.Context, micro.Request, struct{}) error { return nil },
 		)
@@ -79,9 +80,9 @@ func TestHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("Port Error", func(t *testing.T) {
+	t.Run("Handler Error", func(t *testing.T) {
 		handler := microadapter.NewHandler(
-			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, errors.New("fail") },
+			requests.HandlerFunc[struct{}, struct{}](func(context.Context, struct{}) (struct{}, error) { return struct{}{}, errors.New("fail") }),
 			func(context.Context, micro.Request) (struct{}, error) { return struct{}{}, nil },
 			func(context.Context, micro.Request, struct{}) error { return nil },
 		)
@@ -99,7 +100,7 @@ func TestHandler(t *testing.T) {
 
 	t.Run("Encode Error", func(t *testing.T) {
 		handler := microadapter.NewHandler(
-			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+			requests.HandlerFunc[struct{}, struct{}](func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil }),
 			func(context.Context, micro.Request) (struct{}, error) { return struct{}{}, nil },
 			func(context.Context, micro.Request, struct{}) error { return errors.New("fail") },
 		)
@@ -117,7 +118,7 @@ func TestHandler(t *testing.T) {
 
 	t.Run("Happy Path", func(t *testing.T) {
 		handler := microadapter.NewHandler(
-			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+			requests.HandlerFunc[struct{}, struct{}](func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil }),
 			func(context.Context, micro.Request) (struct{}, error) { return struct{}{}, nil },
 			func(_ context.Context, r micro.Request, _ struct{}) error {
 				_ = r.Respond([]byte("hello world"))
@@ -142,7 +143,7 @@ func TestHandler(t *testing.T) {
 
 	t.Run("Custom Error Encoder", func(t *testing.T) {
 		handler := microadapter.NewHandler(
-			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+			requests.HandlerFunc[struct{}, struct{}](func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil }),
 			func(context.Context, micro.Request) (struct{}, error) { return struct{}{}, nil },
 			func(context.Context, micro.Request, struct{}) error { return errors.New("fail") },
 			microadapter.WithErrorEncoder[struct{}, struct{}](func(_ context.Context, err error, msg micro.Request) {

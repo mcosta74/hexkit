@@ -7,12 +7,12 @@ import (
 	"net/http"
 
 	"github.com/mcosta74/hexkit/adapters"
-	"github.com/mcosta74/hexkit/ports"
+	"github.com/mcosta74/hexkit/requests"
 )
 
-// Server wraps a port and implement a http.Handler.
+// Server wraps a request handler and implement a http.Handler.
 type Server[Req, Resp any] struct {
-	p            ports.Port[Req, Resp]
+	h            requests.Handler[Req, Resp]
 	dec          DecodeRequestFunc[Req]
 	enc          EncodeResponseFunc[Resp]
 	before       []RequestFunc
@@ -21,15 +21,15 @@ type Server[Req, Resp any] struct {
 	errorHandler adapters.ErrorHandler
 }
 
-// NewServer creates a new server, which wraps the provided port and implements http.Handler.
+// NewServer creates a new server, which wraps the provided request handler and implements http.Handler.
 func NewServer[Req, Resp any](
-	p ports.Port[Req, Resp],
+	h requests.Handler[Req, Resp],
 	dec DecodeRequestFunc[Req],
 	enc EncodeResponseFunc[Resp],
 	options ...ServerOption[Req, Resp],
 ) *Server[Req, Resp] {
 	s := &Server[Req, Resp]{
-		p:            p,
+		h:            h,
 		dec:          dec,
 		enc:          enc,
 		errorEncoder: DefaultErrorEncoder,
@@ -67,7 +67,7 @@ func WithErrorLogger[Req, Resp any](logger *slog.Logger) ServerOption[Req, Resp]
 }
 
 // WithServerBefore functions are executed on the HTTP request object
-// before the port is invoked.
+// before the request handler is invoked.
 func WithServerBefore[Req, Resp any](before ...RequestFunc) ServerOption[Req, Resp] {
 	return func(s *Server[Req, Resp]) {
 		s.before = append(s.before, before...)
@@ -75,7 +75,7 @@ func WithServerBefore[Req, Resp any](before ...RequestFunc) ServerOption[Req, Re
 }
 
 // WithServerAfter functions are executed on the HTTP response writer
-// after the port is invoked, but before anything is written on the client.
+// after the request handler is invoked, but before anything is written on the client.
 func WithServerAfter[Req, Resp any](after ...ServerResponseFunc) ServerOption[Req, Resp] {
 	return func(s *Server[Req, Resp]) {
 		s.after = append(s.after, after...)
@@ -97,7 +97,7 @@ func (s Server[Req, Resp]) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := s.p(ctx, request)
+	response, err := s.h.Handle(ctx, request)
 	if err != nil {
 		s.errorHandler.Handle(ctx, err)
 		s.errorEncoder(ctx, err, w)

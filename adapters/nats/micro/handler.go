@@ -5,13 +5,13 @@ import (
 	"log/slog"
 
 	"github.com/mcosta74/hexkit/adapters"
-	"github.com/mcosta74/hexkit/ports"
+	"github.com/mcosta74/hexkit/requests"
 	"github.com/nats-io/nats.go/micro"
 )
 
-// Handler wraps a port and implements micro.Handler.
+// Handler wraps a request handler and implements micro.Handler.
 type Handler[Req, Resp any] struct {
-	p            ports.Port[Req, Resp]
+	h            requests.Handler[Req, Resp]
 	dec          DecodeRequestFunc[Req]
 	enc          EncodeResponseFunc[Resp]
 	before       []RequestFunc
@@ -20,16 +20,16 @@ type Handler[Req, Resp any] struct {
 	errorHandler adapters.ErrorHandler
 }
 
-// NewHandler creates a new handler, which wraps the provided port and implements a micro.Handler.
+// NewHandler creates a new handler, which wraps the provided request handler and implements a micro.Handler.
 func NewHandler[Req, Resp any](
-	p ports.Port[Req, Resp],
+	h requests.Handler[Req, Resp],
 	dec DecodeRequestFunc[Req],
 	enc EncodeResponseFunc[Resp],
 	options ...HandlerOption[Req, Resp],
 
 ) *Handler[Req, Resp] {
 	s := &Handler[Req, Resp]{
-		p:            p,
+		h:            h,
 		dec:          dec,
 		enc:          enc,
 		errorEncoder: DefaultErrorEncoder,
@@ -67,7 +67,7 @@ func WithErrorLogger[Req, Resp any](logger *slog.Logger) HandlerOption[Req, Resp
 }
 
 // WithHandlerBefore functions are executed on the NATS message object
-// before the port is invoked.
+// before the request handler is invoked.
 func WithHandlerBefore[Req, Resp any](before ...RequestFunc) HandlerOption[Req, Resp] {
 	return func(s *Handler[Req, Resp]) {
 		s.before = append(s.before, before...)
@@ -75,7 +75,7 @@ func WithHandlerBefore[Req, Resp any](before ...RequestFunc) HandlerOption[Req, 
 }
 
 // WithHandlerAfter functions are executed on the HTTP response writer
-// after the port is invoked, but before anything is written on the client.
+// after the request handler is invoked, but before anything is written on the client.
 func WithHandlerAfter[Req, Resp any](after ...HandlerResponseFunc) HandlerOption[Req, Resp] {
 	return func(s *Handler[Req, Resp]) {
 		s.after = append(s.after, after...)
@@ -100,7 +100,7 @@ func (s *Handler[Req, Resp]) Handle(msg micro.Request) {
 		return
 	}
 
-	response, err := s.p(ctx, request)
+	response, err := s.h.Handle(ctx, request)
 	if err != nil {
 		s.errorHandler.Handle(ctx, err)
 		if msg.Reply() != "" {

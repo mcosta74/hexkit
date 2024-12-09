@@ -6,13 +6,13 @@ import (
 	"log/slog"
 
 	"github.com/mcosta74/hexkit/adapters"
-	"github.com/mcosta74/hexkit/ports"
+	"github.com/mcosta74/hexkit/requests"
 	"github.com/nats-io/nats.go"
 )
 
-// Subscriber wraps a port and provides nats.MsgHandler.
+// Subscriber wraps a request handler and provides nats.MsgHandler.
 type Subscriber[Req, Resp any] struct {
-	p            ports.Port[Req, Resp]
+	h            requests.Handler[Req, Resp]
 	dec          DecodeRequestFunc[Req]
 	enc          EncodeResponseFunc[Resp]
 	before       []RequestFunc
@@ -21,16 +21,16 @@ type Subscriber[Req, Resp any] struct {
 	errorHandler adapters.ErrorHandler
 }
 
-// NewServer creates a new subscriber, which wraps the provided port and provides a nats.MsgHandler.
+// NewServer creates a new subscriber, which wraps the provided request handler and provides a nats.MsgHandler.
 func NewSubscriber[Req, Resp any](
-	p ports.Port[Req, Resp],
+	h requests.Handler[Req, Resp],
 	dec DecodeRequestFunc[Req],
 	enc EncodeResponseFunc[Resp],
 	options ...SubscriberOption[Req, Resp],
 
 ) *Subscriber[Req, Resp] {
 	s := &Subscriber[Req, Resp]{
-		p:            p,
+		h:            h,
 		dec:          dec,
 		enc:          enc,
 		errorEncoder: DefaultErrorEncoder,
@@ -68,7 +68,7 @@ func WithErrorLogger[Req, Resp any](logger *slog.Logger) SubscriberOption[Req, R
 }
 
 // WithSubscriberBefore functions are executed on the NATS message object
-// before the port is invoked.
+// before the request handler is invoked.
 func WithSubscriberBefore[Req, Resp any](before ...RequestFunc) SubscriberOption[Req, Resp] {
 	return func(s *Subscriber[Req, Resp]) {
 		s.before = append(s.before, before...)
@@ -76,7 +76,7 @@ func WithSubscriberBefore[Req, Resp any](before ...RequestFunc) SubscriberOption
 }
 
 // WithSubscriberAfter functions are executed on the HTTP response writer
-// after the port is invoked, but before anything is written on the client.
+// after the request handler is invoked, but before anything is written on the client.
 func WithSubscriberAfter[Req, Resp any](after ...SubscriberResponseFunc) SubscriberOption[Req, Resp] {
 	return func(s *Subscriber[Req, Resp]) {
 		s.after = append(s.after, after...)
@@ -102,7 +102,7 @@ func (s *Subscriber[Req, Resp]) ServeMsg(nc *nats.Conn) nats.MsgHandler {
 			return
 		}
 
-		response, err := s.p(ctx, request)
+		response, err := s.h.Handle(ctx, request)
 		if err != nil {
 			s.errorHandler.Handle(ctx, err)
 			if msg.Reply != "" {

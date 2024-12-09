@@ -12,6 +12,7 @@ import (
 
 	natsadapter "github.com/mcosta74/hexkit/adapters/nats"
 	kittesting "github.com/mcosta74/hexkit/internal/testing"
+	"github.com/mcosta74/hexkit/requests"
 )
 
 type Response struct {
@@ -51,7 +52,7 @@ func TestSubscriber(t *testing.T) {
 
 	t.Run("Decode Error", func(t *testing.T) {
 		handler := natsadapter.NewSubscriber(
-			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+			requests.HandlerFunc[struct{}, struct{}](func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil }),
 			func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, errors.New("fail") },
 			func(context.Context, string, *nats.Conn, struct{}) error { return nil },
 		)
@@ -62,9 +63,9 @@ func TestSubscriber(t *testing.T) {
 			t.Errorf("unexpected response: want=%q, got=%q", want, got)
 		}
 	})
-	t.Run("Port Error", func(t *testing.T) {
+	t.Run("Handler Error", func(t *testing.T) {
 		handler := natsadapter.NewSubscriber(
-			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, errors.New("fail") },
+			requests.HandlerFunc[struct{}, struct{}](func(context.Context, struct{}) (struct{}, error) { return struct{}{}, errors.New("fail") }),
 			func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, nil },
 			func(context.Context, string, *nats.Conn, struct{}) error { return nil },
 		)
@@ -78,7 +79,7 @@ func TestSubscriber(t *testing.T) {
 	})
 	t.Run("Encode Error", func(t *testing.T) {
 		handler := natsadapter.NewSubscriber(
-			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+			requests.HandlerFunc[struct{}, struct{}](func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil }),
 			func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, nil },
 			func(context.Context, string, *nats.Conn, struct{}) error { return errors.New("fail") },
 		)
@@ -92,7 +93,7 @@ func TestSubscriber(t *testing.T) {
 
 	t.Run("Happy Path", func(t *testing.T) {
 		handler := natsadapter.NewSubscriber(
-			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+			requests.HandlerFunc[struct{}, struct{}](func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil }),
 			func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, nil },
 			func(_ context.Context, reply string, nc *nats.Conn, _ struct{}) error {
 				response := struct {
@@ -119,7 +120,7 @@ func TestSubscriber(t *testing.T) {
 
 	t.Run("Custom Error Encoder", func(t *testing.T) {
 		handler := natsadapter.NewSubscriber(
-			func(context.Context, struct{}) (struct{}, error) { return struct{}{}, errors.New("fail") },
+			requests.HandlerFunc[struct{}, struct{}](func(context.Context, struct{}) (struct{}, error) { return struct{}{}, errors.New("fail") }),
 			func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, nil },
 			func(context.Context, string, *nats.Conn, struct{}) error { return nil },
 			natsadapter.WithErrorEncoder[struct{}, struct{}](func(ctx context.Context, err error, reply string, nc *nats.Conn) {

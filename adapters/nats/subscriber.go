@@ -11,7 +11,7 @@ import (
 )
 
 // Subscriber wraps a port and provides nats.MsgHandler.
-type Subscriber[Req any, Resp any] struct {
+type Subscriber[Req, Resp any] struct {
 	p            ports.Port[Req, Resp]
 	dec          DecodeRequestFunc[Req]
 	enc          EncodeResponseFunc[Resp]
@@ -22,7 +22,7 @@ type Subscriber[Req any, Resp any] struct {
 }
 
 // NewServer creates a new subscriber, which wraps the provided port and provides a nats.MsgHandler.
-func NewSubscriber[Req any, Resp any](
+func NewSubscriber[Req, Resp any](
 	p ports.Port[Req, Resp],
 	dec DecodeRequestFunc[Req],
 	enc EncodeResponseFunc[Resp],
@@ -44,24 +44,24 @@ func NewSubscriber[Req any, Resp any](
 }
 
 // SubscriberOption sets optional parameter for the subscriber.
-type SubscriberOption[Req any, Resp any] func(s *Subscriber[Req, Resp])
+type SubscriberOption[Req, Resp any] func(s *Subscriber[Req, Resp])
 
 // WithErrorEncoder sets the error encoder for the subscriber.
-func WithErrorEncoder[Req any, Resp any](ee ErrorEncoder) SubscriberOption[Req, Resp] {
+func WithErrorEncoder[Req, Resp any](ee ErrorEncoder) SubscriberOption[Req, Resp] {
 	return func(s *Subscriber[Req, Resp]) {
 		s.errorEncoder = ee
 	}
 }
 
 // WithErrorHandler sets the error handler for the subscriber.
-func WithErrorHandler[Req any, Resp any](eh adapters.ErrorHandler) SubscriberOption[Req, Resp] {
+func WithErrorHandler[Req, Resp any](eh adapters.ErrorHandler) SubscriberOption[Req, Resp] {
 	return func(s *Subscriber[Req, Resp]) {
 		s.errorHandler = eh
 	}
 }
 
 // WithErrorLogger sets a error handler for the subscriber that logs errors.
-func WithErrorLogger[Req any, Resp any](logger *slog.Logger) SubscriberOption[Req, Resp] {
+func WithErrorLogger[Req, Resp any](logger *slog.Logger) SubscriberOption[Req, Resp] {
 	return func(s *Subscriber[Req, Resp]) {
 		s.errorHandler = adapters.NewSlogErrorHandler(logger)
 	}
@@ -69,7 +69,7 @@ func WithErrorLogger[Req any, Resp any](logger *slog.Logger) SubscriberOption[Re
 
 // WithSubscriberBefore functions are executed on the NATS message object
 // before the port is invoked.
-func WithSubscriberBefore[Req any, Resp any](before ...RequestFunc) SubscriberOption[Req, Resp] {
+func WithSubscriberBefore[Req, Resp any](before ...RequestFunc) SubscriberOption[Req, Resp] {
 	return func(s *Subscriber[Req, Resp]) {
 		s.before = append(s.before, before...)
 	}
@@ -77,7 +77,7 @@ func WithSubscriberBefore[Req any, Resp any](before ...RequestFunc) SubscriberOp
 
 // WithSubscriberAfter functions are executed on the HTTP response writer
 // after the port is invoked, but before anything is written on the client.
-func WithSubscriberAfter[Req any, Resp any](after ...SubscriberResponseFunc) SubscriberOption[Req, Resp] {
+func WithSubscriberAfter[Req, Resp any](after ...SubscriberResponseFunc) SubscriberOption[Req, Resp] {
 	return func(s *Subscriber[Req, Resp]) {
 		s.after = append(s.after, after...)
 	}

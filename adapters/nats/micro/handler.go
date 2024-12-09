@@ -10,7 +10,7 @@ import (
 )
 
 // Handler wraps a port and implements micro.Handler.
-type Handler[Req any, Resp any] struct {
+type Handler[Req, Resp any] struct {
 	p            ports.Port[Req, Resp]
 	dec          DecodeRequestFunc[Req]
 	enc          EncodeResponseFunc[Resp]
@@ -21,7 +21,7 @@ type Handler[Req any, Resp any] struct {
 }
 
 // NewHandler creates a new handler, which wraps the provided port and implements a micro.Handler.
-func NewHandler[Req any, Resp any](
+func NewHandler[Req, Resp any](
 	p ports.Port[Req, Resp],
 	dec DecodeRequestFunc[Req],
 	enc EncodeResponseFunc[Resp],
@@ -43,24 +43,24 @@ func NewHandler[Req any, Resp any](
 }
 
 // HandlerOption sets optional parameter for the handler.
-type HandlerOption[Req any, Resp any] func(s *Handler[Req, Resp])
+type HandlerOption[Req, Resp any] func(s *Handler[Req, Resp])
 
 // WithErrorEncoder sets the error encoder for the handler.
-func WithErrorEncoder[Req any, Resp any](ee ErrorEncoder) HandlerOption[Req, Resp] {
+func WithErrorEncoder[Req, Resp any](ee ErrorEncoder) HandlerOption[Req, Resp] {
 	return func(s *Handler[Req, Resp]) {
 		s.errorEncoder = ee
 	}
 }
 
 // WithErrorHandler sets the error handler for the handler.
-func WithErrorHandler[Req any, Resp any](eh adapters.ErrorHandler) HandlerOption[Req, Resp] {
+func WithErrorHandler[Req, Resp any](eh adapters.ErrorHandler) HandlerOption[Req, Resp] {
 	return func(s *Handler[Req, Resp]) {
 		s.errorHandler = eh
 	}
 }
 
 // WithErrorLogger sets a error handler for the handler that logs errors.
-func WithErrorLogger[Req any, Resp any](logger *slog.Logger) HandlerOption[Req, Resp] {
+func WithErrorLogger[Req, Resp any](logger *slog.Logger) HandlerOption[Req, Resp] {
 	return func(s *Handler[Req, Resp]) {
 		s.errorHandler = adapters.NewSlogErrorHandler(logger)
 	}
@@ -68,7 +68,7 @@ func WithErrorLogger[Req any, Resp any](logger *slog.Logger) HandlerOption[Req, 
 
 // WithHandlerBefore functions are executed on the NATS message object
 // before the port is invoked.
-func WithHandlerBefore[Req any, Resp any](before ...RequestFunc) HandlerOption[Req, Resp] {
+func WithHandlerBefore[Req, Resp any](before ...RequestFunc) HandlerOption[Req, Resp] {
 	return func(s *Handler[Req, Resp]) {
 		s.before = append(s.before, before...)
 	}
@@ -76,7 +76,7 @@ func WithHandlerBefore[Req any, Resp any](before ...RequestFunc) HandlerOption[R
 
 // WithHandlerAfter functions are executed on the HTTP response writer
 // after the port is invoked, but before anything is written on the client.
-func WithHandlerAfter[Req any, Resp any](after ...HandlerResponseFunc) HandlerOption[Req, Resp] {
+func WithHandlerAfter[Req, Resp any](after ...HandlerResponseFunc) HandlerOption[Req, Resp] {
 	return func(s *Handler[Req, Resp]) {
 		s.after = append(s.after, after...)
 	}

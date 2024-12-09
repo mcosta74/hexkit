@@ -20,7 +20,7 @@ type Response struct {
 	ErrCode int    `json:"err_code,omitempty"`
 }
 
-func testRequest[Req any, Resp any](t *testing.T, c *nats.Conn, h *microadapter.Handler[Req, Resp]) Response {
+func testRequest[Req, Resp any](t *testing.T, c *nats.Conn, h *microadapter.Handler[Req, Resp]) Response {
 	t.Helper()
 
 	svc, err := micro.AddService(c, micro.Config{

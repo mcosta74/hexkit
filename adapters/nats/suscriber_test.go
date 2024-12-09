@@ -19,7 +19,7 @@ type Response struct {
 	Err  string `json:"err,omitempty"`
 }
 
-func testRequest[Req any, Resp any](t *testing.T, c *nats.Conn, h *natsadapter.Subscriber[Req, Resp]) Response {
+func testRequest[Req, Resp any](t *testing.T, c *nats.Conn, h *natsadapter.Subscriber[Req, Resp]) Response {
 	t.Helper()
 
 	sub, err := c.QueueSubscribe("natsadapter.test", "natsadapter", h.ServeMsg(c))

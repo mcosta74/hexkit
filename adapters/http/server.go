@@ -11,7 +11,7 @@ import (
 )
 
 // Server wraps a port and implement a http.Handler.
-type Server[Req any, Resp any] struct {
+type Server[Req, Resp any] struct {
 	p            ports.Port[Req, Resp]
 	dec          DecodeRequestFunc[Req]
 	enc          EncodeResponseFunc[Resp]
@@ -22,7 +22,7 @@ type Server[Req any, Resp any] struct {
 }
 
 // NewServer creates a new server, which wraps the provided port and implements http.Handler.
-func NewServer[Req any, Resp any](
+func NewServer[Req, Resp any](
 	p ports.Port[Req, Resp],
 	dec DecodeRequestFunc[Req],
 	enc EncodeResponseFunc[Resp],
@@ -43,24 +43,24 @@ func NewServer[Req any, Resp any](
 }
 
 // ServerOption sets optional parameter for the server.
-type ServerOption[Req any, Resp any] func(s *Server[Req, Resp])
+type ServerOption[Req, Resp any] func(s *Server[Req, Resp])
 
 // WithErrorEncoder sets the error encoder for the server.
-func WithErrorEncoder[Req any, Resp any](ee ErrorEncoder) ServerOption[Req, Resp] {
+func WithErrorEncoder[Req, Resp any](ee ErrorEncoder) ServerOption[Req, Resp] {
 	return func(s *Server[Req, Resp]) {
 		s.errorEncoder = ee
 	}
 }
 
 // WithErrorHandler sets the error handler for the server.
-func WithErrorHandler[Req any, Resp any](eh adapters.ErrorHandler) ServerOption[Req, Resp] {
+func WithErrorHandler[Req, Resp any](eh adapters.ErrorHandler) ServerOption[Req, Resp] {
 	return func(s *Server[Req, Resp]) {
 		s.errorHandler = eh
 	}
 }
 
 // WithErrorLogger sets a error handler for the server that logs errors.
-func WithErrorLogger[Req any, Resp any](logger *slog.Logger) ServerOption[Req, Resp] {
+func WithErrorLogger[Req, Resp any](logger *slog.Logger) ServerOption[Req, Resp] {
 	return func(s *Server[Req, Resp]) {
 		s.errorHandler = adapters.NewSlogErrorHandler(logger)
 	}
@@ -68,7 +68,7 @@ func WithErrorLogger[Req any, Resp any](logger *slog.Logger) ServerOption[Req, R
 
 // WithServerBefore functions are executed on the HTTP request object
 // before the port is invoked.
-func WithServerBefore[Req any, Resp any](before ...RequestFunc) ServerOption[Req, Resp] {
+func WithServerBefore[Req, Resp any](before ...RequestFunc) ServerOption[Req, Resp] {
 	return func(s *Server[Req, Resp]) {
 		s.before = append(s.before, before...)
 	}
@@ -76,7 +76,7 @@ func WithServerBefore[Req any, Resp any](before ...RequestFunc) ServerOption[Req
 
 // WithServerAfter functions are executed on the HTTP response writer
 // after the port is invoked, but before anything is written on the client.
-func WithServerAfter[Req any, Resp any](after ...ServerResponseFunc) ServerOption[Req, Resp] {
+func WithServerAfter[Req, Resp any](after ...ServerResponseFunc) ServerOption[Req, Resp] {
 	return func(s *Server[Req, Resp]) {
 		s.after = append(s.after, after...)
 	}
